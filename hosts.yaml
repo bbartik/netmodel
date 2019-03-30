@@ -1,0 +1,23 @@
+---
+PDXL-3850-CORE:
+    nornir_host: 172.28.247.100
+    nornir_nos: ios
+    groups: 
+        - pdxlab
+        - access
+
+PDXL-3850-01:
+    nornir_host: 172.28.247.101
+    nornir_nos: ios
+    groups: 
+        - pdxlab
+        - access
+
+PDXL-3850-02:
+    nornir_host: 172.28.247.102
+    nornir_nos: ios
+    groups: 
+        - pdxlab
+        - access
+        - core
+
