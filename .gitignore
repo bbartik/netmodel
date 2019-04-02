@@ -3,3 +3,4 @@ groups.yaml
 nornir.log
 __pycache__/
 test
+venv/

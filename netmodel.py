@@ -1,9 +1,9 @@
-#!/usr/bin/env python3.5
 
 import ipaddress
 import pprint
 import json
 import requests
+import random
 
 from nornir.core import InitNornir
 from nornir.plugins.tasks.networking import netmiko_send_command
@@ -165,5 +165,66 @@ for x in linklist:
 
 
 ### PART 5: CREATE THE GNS3 TOPOLOGY
+
+# option to manually set project id
+
+p_id = ""
+
+# create project name with string and random number
+
+r = str(random.randint(100,999))
+prj_name = "netmodel" + r
+print(prj_name)
+
+# Create a project
+
+def create_project():
+    p_data = {"name": prj_name}
+    p_data = json.dumps(p_data)
+    p_url = "http://10.0.0.10:3080/v2/projects"
+    p_create = requests.post(p_url, data=p_data)
+    p_id = json.loads(p_create.text)['project_id']
+    return p_id
+
+if p_id == "" :
+    p_id = create_project()
+
+# set project url so we can append to it easily
+
+prj_url = "http://10.0.0.10:3080/v2/projects/" + p_id
+print("Project URL is: ", prj_url)
+
+# create routers from appliance templates
+
+app_url = prj_url + "/appliances/daa5a71f-6269-428a-bfd4-b7a4e7f43940"
+
+def create_gns_routers(app_url, prj_url):
+    for rtr in gns_router_list:
+       
+        # generate random graph spot for router
+
+        x = (random.randint(0,300))
+        y = (random.randint(0,300))
+        r_data = {"x": x, "y": y}
+        r_data = json.dumps(r_data)
+        rtr_create = requests.post(app_url, data=r_data)
+        print(rtr_create.text)
+          
+        # update node name
+
+        node_id = json.loads(rtr_create.text)['node_id']
+        node_url = prj_url + "/nodes/" + node_id
+        print(node_url)
+        node_data = {"name": rtr.name}
+        node_data = json.dumps(node_data)
+        node_update = requests.put(node_url, data=node_data)
+        print(node_update.text)
+        
+create_gns_routers(app_url, prj_url)
+
+
+
+
+
 
 
