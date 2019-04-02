@@ -2,6 +2,8 @@
 
 import ipaddress
 import pprint
+import json
+import requests
 
 from nornir.core import InitNornir
 from nornir.plugins.tasks.networking import netmiko_send_command
@@ -9,25 +11,23 @@ from nornir.plugins.functions.text import print_result
 from nornir.plugins.tasks.networking import napalm_get
 from napalm import get_network_driver
 
+from gnsmodel import Node
+from gnsmodel import Link
 
-# PART 1: GATHER DATA
 
+### PART 1: GATHER DATA
+
+
+# initialize nornir and router list
 
 nr = InitNornir() 
 router_list = []
-
+gns_router_list = []
 
 # get all the interface data and store it in the intfs variable
 
 intfs = nr.run(task=napalm_get, getters=["interfaces_ip"])
-
-print(intfs)
-print(dir(intfs))
-
 intfs = intfs.items()
-
-print(intfs)
-print(type(intfs))
 
 
 # FUNCTION 1: This function creates an ipv4 interface list per router, each
@@ -36,7 +36,7 @@ print(type(intfs))
 def create_interface_list(intf_result):
 
     # loop through the items and add only the ones with ipv4 addresses
-    # there is lots of unpacking here so use print to find our what you have
+    # there is lots of unpacking here so use print to find out what you have
     
     for k, v in intf_result.items():
         
@@ -59,10 +59,12 @@ def create_interface_list(intf_result):
 
     return intf_list
 
+
+
 for x in intfs:
     
     # clear out the router list, we create a new router dictionary
-    # everytime through. First key is the name, second is the interface
+    # everytime through. First k/v is the name, second k/v is the interface
     # list which is created using the function above.
 
     router = {}
@@ -72,13 +74,18 @@ for x in intfs:
     router["interfaces"] = create_interface_list(intf_result)
     
     router_list.append(router)
+    
+    gns_router = Node(router["name"], 8)
+    gns_router_list.append(gns_router)
 
 
-# PART 2: Part of script which does the mapping of networks to the routers
+
+### PART 2: Create network list ("Links") and add routers to it
 
 
 network = {"networks":[]}
 netmap = []
+
 
 # FUNCTION 2: This creates the network lists based on interface subnets
 # The list is then used to create a "map" of which routers are on each net
@@ -95,22 +102,68 @@ def create_netlist(router_list):
         r["networks"] = rnets
     return netlist_init
 
+# removes duplicates in netlist by converting to setm then back to list:
+
 netlist = list(set(create_netlist(router_list)))
 
-for x in netlist:
-        net_obj = {}
-        net_obj["name"] = x
-        net_obj["nodes"] = []
-        for y in router_list:
-                for z in y["networks"]:
-                        if x == z:
-                                net_obj["nodes"].append(y["name"])
-        netmap.append(net_obj)
 
+# creates the netmap which is a list of dicts containing name of the network
+# and a list of routers (nodes)
+
+id = 0
+for network in netlist:
+    id += 1
+    net_obj = {}
+    net_obj["name"] = network
+    net_obj["nodes"] = []
+    net_obj["id"] = id
+    for y in router_list:
+        for z in y["networks"]:
+            if network == z:
+                net_obj["nodes"].append(y["name"])
+    netmap.append(net_obj)
+
+
+### PART 3: Prompt and prune list
+
+for x in netmap[:]:
+    if len(x["nodes"]) < 2:
+        netmap.remove(x)    
+
+print("These are the links we discovered: ")
+for index, value in enumerate(netmap, 1):
+    print("{}. Network {} connects nodes: {}".format(value["id"], value["name"], value["nodes"]))
+
+q1 = input("Would you like to delete any links? [y/n]")
+
+if q1 == "y":
+    print("Enter link IDs to delete, separated by space: ")
+    links = list(map(int, input().split()))
+
+    for x in links:
+        netmap[:] = [d for d in netmap if d.get('id') != x]
+
+print("These are the links we will model: ")
+for index, value in enumerate(netmap, 1):
+    print("{}. Network {} connects nodes: {}".format(value["id"], value["name"], value["nodes"]))
+    
+
+### PART 4: CREATE THE GNS3 NODE AND LINK MODEL OBJECTS
+
+print("Verifying the router list: ")
+for gr in gns_router_list:
+    print(gr.name)
+
+     
+print("Creating the GNS3 Link objects...")
+linklist = []
 for x in netmap:
-    if len(x["nodes"]) > 1:
-        for y in x["nodes"]:
-            print(y, end=" ")
-        print("are connected on network", x["name"])
+    link_obj = Link(x["name"], routers=x["nodes"])
+    linklist.append(link_obj)
+for x in linklist:
+    print(x.name)
+
+
+### PART 5: CREATE THE GNS3 TOPOLOGY
 
 
