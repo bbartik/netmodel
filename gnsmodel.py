@@ -1,9 +1,9 @@
 
 class Node():
 
-    def __init__(self, name, num_intfs):
+    def __init__(self, node, num_intfs):
 
-        self.name = name
+        self.node = node
         self.num_intfs = num_intfs
         self.intfs = []
         self.intfs = self.add_intf()
@@ -15,6 +15,8 @@ class Node():
             self.intfs.append(intf_name)
         return self.intfs
 
+    def add_id(self, node_id):
+        self.id = node_id
 
 class Link():
 
@@ -22,4 +24,3 @@ class Link():
 
         self.name = name
         self.nodes = kwargs.get("routers")
-
