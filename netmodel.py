@@ -262,28 +262,28 @@ for link in gns_link_list:
 
 # this function creates the actual links on the gns server
 
-def create_gns_link(link, prj_url):
+def create_gns_link(link, port_num, prj_url):
     
     # get the node data for the link and put it in the data object
     # NOTE: need to figure out how to fill these variables
     
-    p_num = 0
     link_data = {}
     link_data["nodes"] = []
     for x in link.nodes:
         port_obj = {}
         port_obj["adapter_number"] = 1
         port_obj["node_id"] = x.id
-        port_obj["port_number"] = p_num
+        port_obj["port_number"] = port_num
         link_data["nodes"].append(port_obj)    
-    p_num += 1
     link_url = prj_url + "/links"
     link_data = json.dumps(link_data)
     link_create = requests.post(link_url, data=link_data)
     print(link_create.text)
 
+port_num = 0
 for link in gns_link_list:
-    create_gns_link(link, prj_url)    
+    create_gns_link(link, port_num, prj_url)  
+    port_num += 1  
 
 
 # display project info to user
