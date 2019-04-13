@@ -8,18 +8,20 @@ import re
 import fileinput
 import paramiko
 
+'''
 from nornir.core import InitNornir
 from nornir.plugins.tasks.networking import netmiko_send_command
 from nornir.plugins.functions.text import print_result
 from nornir.plugins.tasks.networking import napalm_get
 from napalm import get_network_driver
 from ciscoconfparse import CiscoConfParse
+'''
 
 from gnsmodel import Node
 from gnsmodel import Link
 from gnsmodel import Interface
 from gnsconfig import create_gns_config
-
+from gnsproject import create_project
 
 '''
 This script creates a GNS topology based on a live network. Here are the steps
@@ -41,6 +43,7 @@ gns3 topology:
 
 # initialize nornir, and other variables
 
+'''
 nr = InitNornir()
 node_list = []
 gns_node_list = []
@@ -52,24 +55,13 @@ router_get = nr.run(task=napalm_get, getters=["config", "interfaces_ip"])
 router_get = router_get.items()
 
 # gns server, project id, appliance id, random project name
+'''
 
-gns_ip = "172.28.88.11:3080"
+gns_url = "http://10.0.75.1:3080/v2/projects"
 p_id = ""
 app_id = "55258fc4-42a7-4b1a-b0ca-6775f471d3cb"
 r = str(random.randint(100, 999))
 prj_name = "netmodel" + r
-
-
-# create the gns3 project
-
-def create_project():
-    p_data = {"name": prj_name}
-    p_data = json.dumps(p_data)
-    p_url = "http://" + gns_ip + "/v2/projects"
-    p_create = requests.post(p_url, data=p_data)
-    p_id = json.loads(p_create.text)['project_id']
-    return p_id
-
 
 # create_node_list and create_interface_list are creating the data model
 # similar to the example below
@@ -401,13 +393,14 @@ def create_gns_link(link, prj_url):
 # create the GNS3 project and set URLs
 
 if p_id == "":
-    p_id = create_project()
-prj_url = "http://" + gns_ip + "/v2/projects/" + p_id
+    p_id = create_project(prj_name, gns_url)
+prj_url = gns_url + "/" + p_id
 app_url = prj_url + "/appliances/" + app_id
 
 # create a node list based on nornir and napalm results. We also create
 # a Node instance since we have methods that will add stuff to the node
 
+'''
 node_list = create_node_list(router_get)
 for node in node_list:
     gns_node = Node(node)
@@ -481,7 +474,9 @@ for gns_node in gns_node_list:
     ftp_client.put(gns_node.config, remote_file)
     ftp_client.close()
 
+'''
 # display project info to user
 
 print("Project URL is: ", prj_url)
 print("Project name is: ", prj_name)
+print("App URL is: ",app_url)
