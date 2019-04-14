@@ -51,12 +51,8 @@ router_get = nr.run(task=napalm_get, getters=["config", "interfaces_ip"])
 router_get = router_get.items()
 '''
 
-# gns server, project id, appliance id, random project name
-gns_url = "http://10.0.75.1:3080/v2/projects"
-p_id = ""
+# gns server appliance id
 app_id = "55258fc4-42a7-4b1a-b0ca-6775f471d3cb"
-r = str(random.randint(100, 999))
-prj_name = "netmodel" + r
 
 # create_node_list and create_interface_list are creating the data model
 # similar to the example below
@@ -382,93 +378,98 @@ def create_gns_link(link, prj_url):
     print(link_create.text)
 
 
-# create the GNS3 project and set URLs
+def main():
+    # create the GNS3 project and set URLs
+    
+    
+    if p_id == "":
+        p_id = create_project(prj_name, gns_url)
+    prj_url = gns_url + "/" + p_id
+    app_url = prj_url + "/appliances/" + app_id
 
-if p_id == "":
-    p_id = create_project(prj_name, gns_url)
-prj_url = gns_url + "/" + p_id
-app_url = prj_url + "/appliances/" + app_id
+    # create a node list based on nornir and napalm results. We also create
+    # a Node instance since we have methods that will add stuff to the node
 
-# create a node list based on nornir and napalm results. We also create
-# a Node instance since we have methods that will add stuff to the node
 
-'''
-node_list = create_node_list(router_get)
-for node in node_list:
-    gns_node = Node(node)
-    gns_node_list.append(gns_node)
+    node_list = create_node_list(router_get)
+    for node in node_list:
+        gns_node = Node(node)
+        gns_node_list.append(gns_node)
 
-# create list of networks for netmap and linkmap functions, removes duplicates
+    # create list of networks for netmap and linkmap functions, removes duplicates
 
-netlist = list(set(create_netlist(node_list)))
+    netlist = list(set(create_netlist(node_list)))
 
-# g_id is an internal gns number used for naming the startup config
+    # g_id is an internal gns number used for naming the startup config
 
-g_id = 1
-for gns_node in gns_node_list:
-    startup_config = "i" + str(g_id) + "_startup-config.cfg"
-    create_gns_node(gns_node, app_url, prj_url)
-    gns_node.add_startup(startup_config)
-    g_id += 1
+    g_id = 1
+    for gns_node in gns_node_list:
+        startup_config = "i" + str(g_id) + "_startup-config.cfg"
+        create_gns_node(gns_node, app_url, prj_url)
+        gns_node.add_startup(startup_config)
+        g_id += 1
 
-netmap = create_netmap(netlist, node_list, gns_node_list)
+    netmap = create_netmap(netlist, node_list, gns_node_list)
 
-# create a list of networks that we can use in list comprehension to delete
-# unneded interfaces from the gns_node objects
+    # create a list of networks that we can use in list comprehension to delete
+    # unneded interfaces from the gns_node objects
 
-subnets = []
-for nets in netmap:
-    subnets.append(str(nets["name"]))
+    subnets = []
+    for nets in netmap:
+        subnets.append(str(nets["name"]))
 
-prune_gns_node_intfs(gns_node_list, subnets)
+    prune_gns_node_intfs(gns_node_list, subnets)
 
-# loop through each gns node interface reamining and add gns port info
+    # loop through each gns node interface reamining and add gns port info
 
-for gns_node in gns_node_list:
-    port_num = 0
-    for i in gns_node.node["interfaces"]:
-        gns_adapter = 1
-        gns_port = port_num
-        gns_ifname = "Ethernet" + str(gns_adapter) + "/" + str(gns_port)
-        gns_port_info = (gns_adapter, gns_port, gns_ifname)
-        add_gns_interfaces(i, gns_port_info)
-        port_num += 1
-        if gns_port == 8:
-            print("quitting until you add counter to adapter")
-            exit()
+    for gns_node in gns_node_list:
+        port_num = 0
+        for i in gns_node.node["interfaces"]:
+            gns_adapter = 1
+            gns_port = port_num
+            gns_ifname = "Ethernet" + str(gns_adapter) + "/" + str(gns_port)
+            gns_port_info = (gns_adapter, gns_port, gns_ifname)
+            add_gns_interfaces(i, gns_port_info)
+            port_num += 1
+            if gns_port == 8:
+                print("quitting until you add counter to adapter")
+                exit()
 
-# recreate the netmap to add gns port info
+    # recreate the netmap to add gns port info
 
-linkmap = create_linkmap(netlist, node_list, gns_node_list)
+    linkmap = create_linkmap(netlist, node_list, gns_node_list)
 
-# call the function to add configs to the nodes
+    # call the function to add configs to the nodes
 
-add_node_cfg(router_get, gns_node_list)
+    add_node_cfg(router_get, gns_node_list)
 
-# update the interfaces with the gns names
+    # update the interfaces with the gns names
 
-for gns_node in gns_node_list:
-    modify_cfg(gns_node)
+    for gns_node in gns_node_list:
+        modify_cfg(gns_node)
 
-print("Creating the GNS3 Link objects...")
+    print("Creating the GNS3 Link objects...")
 
-for link in linkmap:
-    create_gns_link(link, prj_url)
+    for link in linkmap:
+        create_gns_link(link, prj_url)
 
-ssh_client = paramiko.SSHClient()
-ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh_client.connect(hostname="172.28.88.11", username="gns3", password="gns3")
+    ssh_client = paramiko.SSHClient()
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client.connect(hostname="172.28.88.11", username="gns3", password="gns3")
 
-for gns_node in gns_node_list:
-    print(gns_node.__dict__)
-    ftp_client = ssh_client.open_sftp()
-    remote_file = gns_node.dir + "/configs/" + gns_node.startup
-    ftp_client.put(gns_node.config, remote_file)
-    ftp_client.close()
+    for gns_node in gns_node_list:
+        print(gns_node.__dict__)
+        ftp_client = ssh_client.open_sftp()
+        remote_file = gns_node.dir + "/configs/" + gns_node.startup
+        ftp_client.put(gns_node.config, remote_file)
+        ftp_client.close()
 
-'''
-# display project info to user
 
-print("Project URL is: ", prj_url)
-print("Project name is: ", prj_name)
-print("App URL is: ",app_url)
+    # display project info to user
+
+    print("Project URL is: ", prj_url)
+    print("Project name is: ", prj_name)
+    print("App URL is: ",app_url)
+
+if __name__ == "__main__":
+    main()
