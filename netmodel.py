@@ -448,9 +448,10 @@ def main():
         remote_file = gns_node.dir + "/configs/" + gns_node.startup
         ftp_client.put(gns_node.config, remote_file)
         ftp_client.close()
-
-if __name__ == "__main__":
-    main()
+ 
     # display project info to user
     print(project)
     print("App URL is: ",app_url)
+
+if __name__ == "__main__":
+    main()

@@ -28,9 +28,9 @@ class GnsProject():
             print('serverconfig.yaml not found.')
         else:
             if 'gns3' in data['server'].keys():
-                if 'ip' in data['server']['gns3']:
+                if 'ip' in data['server']['gns3'].keys():
                     url_ip = data['server']['gns3']['ip']
-                if 'port' in data['server']['gns3']:
+                if 'port' in data['server']['gns3'].keys():
                     url_port = data['server']['gns3']['port']
         
         self.gns_url = f"http://{url_ip}:{url_port}/v2/"
