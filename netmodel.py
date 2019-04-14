@@ -8,14 +8,12 @@ import re
 import fileinput
 import paramiko
 
-'''
-from nornir.core import InitNornir
+from nornir import InitNornir
 from nornir.plugins.tasks.networking import netmiko_send_command
 from nornir.plugins.functions.text import print_result
 from nornir.plugins.tasks.networking import napalm_get
 from napalm import get_network_driver
 from ciscoconfparse import CiscoConfParse
-'''
 
 from gnsmodel import Node
 from gnsmodel import Link
@@ -40,23 +38,20 @@ gns3 topology:
 8. Create the gns tpology
 '''
 
-
 # initialize nornir, and other variables
-
-'''
 nr = InitNornir()
 node_list = []
 gns_node_list = []
 network = {"networks": []}
 
-# get all the interface data and store it in the intfs variable
 
+# get all the interface data and store it in the intfs variable
+'''
 router_get = nr.run(task=napalm_get, getters=["config", "interfaces_ip"])
 router_get = router_get.items()
-
-# gns server, project id, appliance id, random project name
 '''
 
+# gns server, project id, appliance id, random project name
 gns_url = "http://10.0.75.1:3080/v2/projects"
 p_id = ""
 app_id = "55258fc4-42a7-4b1a-b0ca-6775f471d3cb"
@@ -65,7 +60,6 @@ prj_name = "netmodel" + r
 
 # create_node_list and create_interface_list are creating the data model
 # similar to the example below
-
 '''
 Example of what is being created:
 [{"name":"r1","interfaces":[{"int":"e1","ip":"192.168.12.1",
@@ -75,7 +69,6 @@ Example of what is being created:
       "mask":"255.255.255.0"},{"int":"e2","ip":"192.168.23.2",
       "mask":"255.255.255.0"}]}]
 '''
-
 
 def create_node_list(router_get):
     for x in router_get:
@@ -104,7 +97,6 @@ def create_node_list(router_get):
         node_list.append(node)
 
     return node_list
-
 
 def create_interface_list(intf_result):
 
