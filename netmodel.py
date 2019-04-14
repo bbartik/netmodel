@@ -19,7 +19,7 @@ from gnsmodel import Node
 from gnsmodel import Link
 from gnsmodel import Interface
 from gnsconfig import create_gns_config
-from gnsproject import create_project
+from gnsproject import GnsProject
 
 '''
 This script creates a GNS topology based on a live network. Here are the steps
@@ -44,12 +44,9 @@ node_list = []
 gns_node_list = []
 network = {"networks": []}
 
-
 # get all the interface data and store it in the intfs variable
-'''
 router_get = nr.run(task=napalm_get, getters=["config", "interfaces_ip"])
 router_get = router_get.items()
-'''
 
 # gns server appliance id
 app_id = "55258fc4-42a7-4b1a-b0ca-6775f471d3cb"
@@ -380,28 +377,21 @@ def create_gns_link(link, prj_url):
 
 def main():
     # create the GNS3 project and set URLs
-    
-    
-    if p_id == "":
-        p_id = create_project(prj_name, gns_url)
-    prj_url = gns_url + "/" + p_id
+    project = GnsProject()
+    prj_url = project.prj_url
     app_url = prj_url + "/appliances/" + app_id
 
     # create a node list based on nornir and napalm results. We also create
     # a Node instance since we have methods that will add stuff to the node
-
-
     node_list = create_node_list(router_get)
     for node in node_list:
         gns_node = Node(node)
         gns_node_list.append(gns_node)
 
     # create list of networks for netmap and linkmap functions, removes duplicates
-
     netlist = list(set(create_netlist(node_list)))
 
     # g_id is an internal gns number used for naming the startup config
-
     g_id = 1
     for gns_node in gns_node_list:
         startup_config = "i" + str(g_id) + "_startup-config.cfg"
@@ -413,7 +403,6 @@ def main():
 
     # create a list of networks that we can use in list comprehension to delete
     # unneded interfaces from the gns_node objects
-
     subnets = []
     for nets in netmap:
         subnets.append(str(nets["name"]))
@@ -421,7 +410,6 @@ def main():
     prune_gns_node_intfs(gns_node_list, subnets)
 
     # loop through each gns node interface reamining and add gns port info
-
     for gns_node in gns_node_list:
         port_num = 0
         for i in gns_node.node["interfaces"]:
@@ -436,15 +424,12 @@ def main():
                 exit()
 
     # recreate the netmap to add gns port info
-
     linkmap = create_linkmap(netlist, node_list, gns_node_list)
 
     # call the function to add configs to the nodes
-
     add_node_cfg(router_get, gns_node_list)
 
     # update the interfaces with the gns names
-
     for gns_node in gns_node_list:
         modify_cfg(gns_node)
 
@@ -464,12 +449,8 @@ def main():
         ftp_client.put(gns_node.config, remote_file)
         ftp_client.close()
 
-
-    # display project info to user
-
-    print("Project URL is: ", prj_url)
-    print("Project name is: ", prj_name)
-    print("App URL is: ",app_url)
-
 if __name__ == "__main__":
     main()
+    # display project info to user
+    print(project)
+    print("App URL is: ",app_url)
