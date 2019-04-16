@@ -4,3 +4,5 @@ nornir.log
 __pycache__/
 test
 venv/
+Pipfile
+Pipfile.lock

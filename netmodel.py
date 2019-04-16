@@ -8,7 +8,7 @@ import re
 import fileinput
 import paramiko
 
-from nornir.core import InitNornir
+from nornir import InitNornir
 from nornir.plugins.tasks.networking import netmiko_send_command
 from nornir.plugins.functions.text import print_result
 from nornir.plugins.tasks.networking import napalm_get
@@ -19,7 +19,7 @@ from gnsmodel import Node
 from gnsmodel import Link
 from gnsmodel import Interface
 from gnsconfig import create_gns_config
-
+from gnsproject import GnsProject
 
 '''
 This script creates a GNS topology based on a live network. Here are the steps
@@ -38,42 +38,21 @@ gns3 topology:
 8. Create the gns tpology
 '''
 
-
 # initialize nornir, and other variables
-
 nr = InitNornir()
 node_list = []
 gns_node_list = []
 network = {"networks": []}
 
 # get all the interface data and store it in the intfs variable
-
 router_get = nr.run(task=napalm_get, getters=["config", "interfaces_ip"])
 router_get = router_get.items()
 
-# gns server, project id, appliance id, random project name
-
-gns_ip = "172.28.88.11:3080"
-p_id = ""
+# gns server appliance id
 app_id = "55258fc4-42a7-4b1a-b0ca-6775f471d3cb"
-r = str(random.randint(100, 999))
-prj_name = "netmodel" + r
-
-
-# create the gns3 project
-
-def create_project():
-    p_data = {"name": prj_name}
-    p_data = json.dumps(p_data)
-    p_url = "http://" + gns_ip + "/v2/projects"
-    p_create = requests.post(p_url, data=p_data)
-    p_id = json.loads(p_create.text)['project_id']
-    return p_id
-
 
 # create_node_list and create_interface_list are creating the data model
 # similar to the example below
-
 '''
 Example of what is being created:
 [{"name":"r1","interfaces":[{"int":"e1","ip":"192.168.12.1",
@@ -83,7 +62,6 @@ Example of what is being created:
       "mask":"255.255.255.0"},{"int":"e2","ip":"192.168.23.2",
       "mask":"255.255.255.0"}]}]
 '''
-
 
 def create_node_list(router_get):
     for x in router_get:
@@ -112,7 +90,6 @@ def create_node_list(router_get):
         node_list.append(node)
 
     return node_list
-
 
 def create_interface_list(intf_result):
 
@@ -398,90 +375,83 @@ def create_gns_link(link, prj_url):
     print(link_create.text)
 
 
-# create the GNS3 project and set URLs
+def main():
+    # create the GNS3 project and set URLs
+    project = GnsProject()
+    prj_url = project.prj_url
+    app_url = prj_url + "/appliances/" + app_id
 
-if p_id == "":
-    p_id = create_project()
-prj_url = "http://" + gns_ip + "/v2/projects/" + p_id
-app_url = prj_url + "/appliances/" + app_id
+    # create a node list based on nornir and napalm results. We also create
+    # a Node instance since we have methods that will add stuff to the node
+    node_list = create_node_list(router_get)
+    for node in node_list:
+        gns_node = Node(node)
+        gns_node_list.append(gns_node)
 
-# create a node list based on nornir and napalm results. We also create
-# a Node instance since we have methods that will add stuff to the node
+    # create list of networks for netmap and linkmap functions, removes duplicates
+    netlist = list(set(create_netlist(node_list)))
 
-node_list = create_node_list(router_get)
-for node in node_list:
-    gns_node = Node(node)
-    gns_node_list.append(gns_node)
+    # g_id is an internal gns number used for naming the startup config
+    g_id = 1
+    for gns_node in gns_node_list:
+        startup_config = "i" + str(g_id) + "_startup-config.cfg"
+        create_gns_node(gns_node, app_url, prj_url)
+        gns_node.add_startup(startup_config)
+        g_id += 1
 
-# create list of networks for netmap and linkmap functions, removes duplicates
+    netmap = create_netmap(netlist, node_list, gns_node_list)
 
-netlist = list(set(create_netlist(node_list)))
+    # create a list of networks that we can use in list comprehension to delete
+    # unneded interfaces from the gns_node objects
+    subnets = []
+    for nets in netmap:
+        subnets.append(str(nets["name"]))
 
-# g_id is an internal gns number used for naming the startup config
+    prune_gns_node_intfs(gns_node_list, subnets)
 
-g_id = 1
-for gns_node in gns_node_list:
-    startup_config = "i" + str(g_id) + "_startup-config.cfg"
-    create_gns_node(gns_node, app_url, prj_url)
-    gns_node.add_startup(startup_config)
-    g_id += 1
+    # loop through each gns node interface reamining and add gns port info
+    for gns_node in gns_node_list:
+        port_num = 0
+        for i in gns_node.node["interfaces"]:
+            gns_adapter = 1
+            gns_port = port_num
+            gns_ifname = "Ethernet" + str(gns_adapter) + "/" + str(gns_port)
+            gns_port_info = (gns_adapter, gns_port, gns_ifname)
+            add_gns_interfaces(i, gns_port_info)
+            port_num += 1
+            if gns_port == 8:
+                print("quitting until you add counter to adapter")
+                exit()
 
-netmap = create_netmap(netlist, node_list, gns_node_list)
+    # recreate the netmap to add gns port info
+    linkmap = create_linkmap(netlist, node_list, gns_node_list)
 
-# create a list of networks that we can use in list comprehension to delete
-# unneded interfaces from the gns_node objects
+    # call the function to add configs to the nodes
+    add_node_cfg(router_get, gns_node_list)
 
-subnets = []
-for nets in netmap:
-    subnets.append(str(nets["name"]))
+    # update the interfaces with the gns names
+    for gns_node in gns_node_list:
+        modify_cfg(gns_node)
 
-prune_gns_node_intfs(gns_node_list, subnets)
+    print("Creating the GNS3 Link objects...")
 
-# loop through each gns node interface reamining and add gns port info
+    for link in linkmap:
+        create_gns_link(link, prj_url)
 
-for gns_node in gns_node_list:
-    port_num = 0
-    for i in gns_node.node["interfaces"]:
-        gns_adapter = 1
-        gns_port = port_num
-        gns_ifname = "Ethernet" + str(gns_adapter) + "/" + str(gns_port)
-        gns_port_info = (gns_adapter, gns_port, gns_ifname)
-        add_gns_interfaces(i, gns_port_info)
-        port_num += 1
-        if gns_port == 8:
-            print("quitting until you add counter to adapter")
-            exit()
+    ssh_client = paramiko.SSHClient()
+    ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh_client.connect(hostname="172.28.88.11", username="gns3", password="gns3")
 
-# recreate the netmap to add gns port info
+    for gns_node in gns_node_list:
+        print(gns_node.__dict__)
+        ftp_client = ssh_client.open_sftp()
+        remote_file = gns_node.dir + "/configs/" + gns_node.startup
+        ftp_client.put(gns_node.config, remote_file)
+        ftp_client.close()
+ 
+    # display project info to user
+    print(project)
+    print("App URL is: ",app_url)
 
-linkmap = create_linkmap(netlist, node_list, gns_node_list)
-
-# call the function to add configs to the nodes
-
-add_node_cfg(router_get, gns_node_list)
-
-# update the interfaces with the gns names
-
-for gns_node in gns_node_list:
-    modify_cfg(gns_node)
-
-print("Creating the GNS3 Link objects...")
-
-for link in linkmap:
-    create_gns_link(link, prj_url)
-
-ssh_client = paramiko.SSHClient()
-ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-ssh_client.connect(hostname="172.28.88.11", username="gns3", password="gns3")
-
-for gns_node in gns_node_list:
-    print(gns_node.__dict__)
-    ftp_client = ssh_client.open_sftp()
-    remote_file = gns_node.dir + "/configs/" + gns_node.startup
-    ftp_client.put(gns_node.config, remote_file)
-    ftp_client.close()
-
-# display project info to user
-
-print("Project URL is: ", prj_url)
-print("Project name is: ", prj_name)
+if __name__ == "__main__":
+    main()
